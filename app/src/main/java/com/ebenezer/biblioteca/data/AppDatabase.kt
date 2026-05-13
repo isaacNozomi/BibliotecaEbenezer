@@ -8,8 +8,8 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [
         LibroEntity::class,
-        ParrafoEntity::class,
-        ParrafoFtsEntity::class   // <-- Añadido
+        ParrafoEntity::class
+        // ParrafoFtsEntity::class  <-- ELIMINADO
     ],
     version = 1,
     exportSchema = false
