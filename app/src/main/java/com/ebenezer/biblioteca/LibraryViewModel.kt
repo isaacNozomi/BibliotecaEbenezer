@@ -2,9 +2,8 @@ package com.ebenezer.biblioteca
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.sqlite.db.SimpleSQLiteQuery
-import com.ebenezer.biblioteca.data.AppDatabase
+import com.ebenezer.biblioteca.data.LibraryDao
+import com.ebenezer.biblioteca.data.LibraryDb
 import com.ebenezer.biblioteca.data.LibroEntity
 import com.ebenezer.biblioteca.data.ParrafoEntity
 import com.ebenezer.biblioteca.data.SearchResult
@@ -15,7 +14,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 
 class LibraryViewModel(application: Application) : AndroidViewModel(application) {
-    private val dao = AppDatabase.getDatabase(application).libraryDao()
+    private val dao = LibraryDao(LibraryDb.getDatabase(application))
 
     val books: Flow<List<LibroEntity>> = dao.getAllBooks()
 
@@ -31,24 +30,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     val searchQuery: StateFlow<String> = _searchQuery
 
     val searchResults: Flow<List<SearchResult>> = _searchQuery.flatMapLatest { query ->
-        if (query.length >= 2) {
-            val sqlQuery = SimpleSQLiteQuery(
-                """
-                SELECT parrafos.id, parrafos.libro_id, parrafos.numero_parrafo,
-                       snippet(parrafos_fts, 0, '<b>', '</b>', '...', 32) AS snippet,
-                       libros.titulo
-                FROM parrafos_fts
-                JOIN parrafos ON parrafos_fts.rowid = parrafos.id
-                JOIN libros ON parrafos.libro_id = libros.id
-                WHERE parrafos_fts MATCH ?
-                ORDER BY rank
-                """,
-                arrayOf(query)
-            )
-            dao.searchRaw(sqlQuery)
-        } else {
-            flowOf(emptyList())
-        }
+        if (query.length >= 2) dao.search(query)
+        else flowOf(emptyList())
     }
 
     fun selectBook(bookId: Long) {
