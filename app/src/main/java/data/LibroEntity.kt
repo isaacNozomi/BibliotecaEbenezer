@@ -4,8 +4,9 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "libros")
-data class Libro(
-    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+data class LibroEntity(
+    @PrimaryKey val id: Long,
     val titulo: String,
-    val codigo: String
+    val codigo: String,
+    val fecha: String
 )

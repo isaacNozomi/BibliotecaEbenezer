@@ -4,14 +4,15 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
-/**
- * CONFIGURACIÓN DE LA BASE DE DATOS.
- * Se conecta al archivo 'biblioteca.db' que generamos con Python.
- */
-@Database(entities = [Libro::class, Parrafo::class], version = 1, exportSchema = false)
+@Database(
+    entities = [LibroEntity::class, ParrafoEntity::class],
+    version = 1,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
-    
     abstract fun libraryDao(): LibraryDao
 
     companion object {
@@ -25,8 +26,6 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "biblioteca.db"
                 )
-                // ESTA LÍNEA ES LA MÁS IMPORTANTE:
-                // Le dice a la App que use el archivo que está en assets/database/
                 .createFromAsset("database/biblioteca.db")
                 .build()
                 INSTANCE = instance
