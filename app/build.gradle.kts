@@ -45,9 +45,7 @@ android {
 }
 
 dependencies {
-    // Solo SQLite (sin Room)
-    implementation("androidx.sqlite:sqlite:2.4.0")
-    implementation("androidx.sqlite:sqlite-framework:2.4.0")
+   
 
     // Paging 3
     val paging_version = "3.2.1"

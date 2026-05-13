@@ -1,15 +1,15 @@
 package com.ebenezer.biblioteca.data
 
 import android.database.Cursor
-import androidx.sqlite.db.SupportSQLiteDatabase
+import android.database.sqlite.SQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
-class LibraryDao(private val db: SupportSQLiteDatabase) {
+class LibraryDao(private val db: SQLiteDatabase) {
 
     fun getAllBooks(): Flow<List<LibroEntity>> = flow {
         val list = mutableListOf<LibroEntity>()
-        db.query("SELECT * FROM libros ORDER BY titulo").use { cursor ->
+        db.rawQuery("SELECT * FROM libros ORDER BY titulo", null).use { cursor ->
             while (cursor.moveToNext()) {
                 list.add(
                     LibroEntity(
@@ -26,7 +26,7 @@ class LibraryDao(private val db: SupportSQLiteDatabase) {
 
     fun getParagraphsByBook(bookId: Long): Flow<List<ParrafoEntity>> = flow {
         val list = mutableListOf<ParrafoEntity>()
-        db.query("SELECT * FROM parrafos WHERE libro_id = ? ORDER BY numero_parrafo", arrayOf(bookId)).use { cursor ->
+        db.rawQuery("SELECT * FROM parrafos WHERE libro_id = ? ORDER BY numero_parrafo", arrayOf(bookId.toString())).use { cursor ->
             while (cursor.moveToNext()) {
                 list.add(
                     ParrafoEntity(
@@ -43,7 +43,7 @@ class LibraryDao(private val db: SupportSQLiteDatabase) {
 
     fun search(query: String): Flow<List<SearchResult>> = flow {
         val list = mutableListOf<SearchResult>()
-        db.query("""
+        db.rawQuery("""
             SELECT p.id, p.libro_id, p.numero_parrafo,
                    snippet(parrafos_fts, 0, '<b>', '</b>', '...', 32) AS snippet,
                    l.titulo
