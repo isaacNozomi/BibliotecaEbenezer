@@ -1,25 +1,38 @@
 package com.ebenezer.biblioteca.data
 
-import androidx.room.Entity
-import androidx.room.ForeignKey
-import androidx.room.Index
-import androidx.room.PrimaryKey
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
 
-@Entity(
-    tableName = "parrafos",
-    foreignKeys = [
-        ForeignKey(
-            entity = LibroEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["libro_id"],
-            onDelete = ForeignKey.CASCADE
-        )
+@Database(
+    entities = [
+        LibroEntity::class,
+        ParrafoEntity::class
+        // ParrafoFtsEntity::class  ELIMINADO
     ],
-    indices = [Index("libro_id")]
+    version = 1,
+    exportSchema = false
 )
-data class ParrafoEntity(
-    @PrimaryKey val id: Long,
-    val libro_id: Long,
-    val numero_parrafo: Int,
-    val contenido: String
-)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun libraryDao(): LibraryDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: AppDatabase? = null
+
+        fun getDatabase(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "biblioteca.db"
+                )
+                .createFromAsset("database/biblioteca.db")
+                .build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
+}
