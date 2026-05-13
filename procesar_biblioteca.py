@@ -4,53 +4,77 @@ import os
 import re
 
 # CONFIGURACIÓN
-CARPETA_PDFS = "mis_libros"  # Pon tus PDFs en una carpeta con este nombre
+CARPETA_PDFS = "mis_libros"
 DB_PATH = "app/src/main/assets/database/biblioteca.db"
 
 def inicializar_db():
-    # Creamos la carpeta si no existe
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Creamos las tablas tal como las definimos en la App de Android
+    # Borrar tablas anteriores (opcional, útil para regeneraciones)
     cursor.execute("DROP TABLE IF EXISTS libros")
     cursor.execute("DROP TABLE IF EXISTS parrafos")
+    cursor.execute("DROP TABLE IF EXISTS parrafos_fts")
+    cursor.execute("DROP TABLE IF EXISTS room_master_table")  # Por si acaso
     
+    # Crear libros con las columnas exactas de LibroEntity
     cursor.execute("""
         CREATE TABLE libros (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titulo TEXT,
-            codigo TEXT
+            id INTEGER PRIMARY KEY,
+            titulo TEXT NOT NULL,
+            codigo TEXT NOT NULL,
+            fecha TEXT NOT NULL DEFAULT ''
         )
     """)
     
+    # Crear párrafos con las columnas exactas de ParrafoEntity
     cursor.execute("""
         CREATE TABLE parrafos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            libroId INTEGER,
-            numero INTEGER,
-            contenido TEXT,
-            referenciaBiblica TEXT,
-            FOREIGN KEY(libroId) REFERENCES libros(id)
+            id INTEGER PRIMARY KEY,
+            libro_id INTEGER NOT NULL,
+            numero_parrafo INTEGER NOT NULL,
+            contenido TEXT NOT NULL,
+            FOREIGN KEY(libro_id) REFERENCES libros(id) ON DELETE CASCADE
         )
     """)
     
-    # Room necesita una tabla técnica para funcionar
-    cursor.execute("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)")
-    cursor.execute("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '777')")
+    # Crear tabla virtual FTS5 (contenido sincronizado con parrafos)
+    cursor.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS parrafos_fts USING fts5(
+            contenido,
+            content=parrafos,
+            content_rowid=id,
+            tokenize='unicode61'
+        )
+    """)
+    
+    # Disparadores para mantener sincronizada la tabla FTS automáticamente
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS parrafos_ai AFTER INSERT ON parrafos BEGIN
+            INSERT INTO parrafos_fts(rowid, contenido) VALUES (new.id, new.contenido);
+        END
+    """)
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS parrafos_ad AFTER DELETE ON parrafos BEGIN
+            INSERT INTO parrafos_fts(parrafos_fts, rowid, contenido) VALUES('delete', old.id, old.contenido);
+        END
+    """)
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS parrafos_au AFTER UPDATE ON parrafos BEGIN
+            INSERT INTO parrafos_fts(parrafos_fts, rowid, contenido) VALUES('delete', old.id, old.contenido);
+            INSERT INTO parrafos_fts(rowid, contenido) VALUES (new.id, new.contenido);
+        END
+    """)
     
     conn.commit()
     return conn
 
 def extraer_parrafos(texto_completo):
-    # Esta expresión busca números de párrafo (ej: "\n 2 \n" o "\n15\n")
-    # Es específica para el formato de los libros que me mostraste
+    # Tu lógica de extracción se mantiene igual si funciona con tus PDFs
     bloques = re.split(r'\n\s*(\d+)\s*\n', texto_completo)
-    
     resultado = []
-    # El primer elemento antes del primer número suele ser la introducción
     for i in range(1, len(bloques), 2):
         num_parrafo = int(bloques[i])
         contenido = bloques[i+1].strip().replace('\r', '')
@@ -73,25 +97,29 @@ def procesar():
         path_completo = os.path.join(CARPETA_PDFS, nombre_archivo)
         doc = fitz.open(path_completo)
         
-        # El título es el nombre del archivo (quitando el .pdf)
         titulo = nombre_archivo.replace('.pdf', '')
-        codigo = titulo.split(' ')[0] # Toma la primera palabra como código
+        codigo = titulo.split(' ')[0]  # o la lógica que prefieras
         
-        # Insertar libro
-        cursor.execute("INSERT INTO libros (titulo, codigo) VALUES (?, ?)", (titulo, codigo))
+        # Insertar libro con fecha genérica (puedes cambiarlo)
+        cursor.execute(
+            "INSERT INTO libros (id, titulo, codigo, fecha) VALUES (?, ?, ?, ?)",
+            (None, titulo, codigo, "2025")
+        )
         libro_id = cursor.lastrowid
         
-        # Extraer todo el texto del libro
+        # Extraer texto completo
         texto_total = ""
         for pagina in doc:
             texto_total += pagina.get_text()
         
-        # Procesar párrafos
         parrafos = extraer_parrafos(texto_total)
         
-        # Insertar párrafos en masa (más rápido)
-        datos_parrafos = [(libro_id, p[0], p[1]) for p in parrafos]
-        cursor.executemany("INSERT INTO parrafos (libroId, numero, contenido) VALUES (?, ?, ?)", datos_parrafos)
+        # Insertar párrafos en bloque (los triggers llenarán parrafos_fts)
+        datos = [(None, libro_id, num, cont) for num, cont in parrafos]
+        cursor.executemany(
+            "INSERT INTO parrafos (id, libro_id, numero_parrafo, contenido) VALUES (?, ?, ?, ?)",
+            datos
+        )
         
         print(f"✔ Procesado: {titulo} ({len(parrafos)} párrafos)")
         doc.close()
