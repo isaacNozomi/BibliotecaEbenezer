@@ -1,10 +1,8 @@
 package com.ebenezer.biblioteca.data
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
-import androidx.sqlite.db.SupportSQLiteOpenHelper
-import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
+import androidx.sqlite.db.framework.FrameworkSQLiteDatabase
 import java.io.File
 import java.io.FileOutputStream
 
@@ -13,13 +11,30 @@ object LibraryDb {
 
     fun getDatabase(context: Context): SupportSQLiteDatabase {
         val dbFile = context.getDatabasePath(DB_NAME)
+
+        // Si la base de datos no existe, la copiamos desde assets
         if (!dbFile.exists()) {
-            copyDatabase(context, dbFile)
+            try {
+                copyDatabase(context, dbFile)
+            } catch (e: Exception) {
+                throw RuntimeException("No se pudo copiar la base de datos. Verifica que el archivo assets/database/biblioteca.db exista en el proyecto.", e)
+            }
         }
-        val config = SupportSQLiteOpenHelper.Configuration.builder(context)
-            .name(DB_NAME)
-            .build()
-        return FrameworkSQLiteOpenHelperFactory().create(config).writableDatabase
+
+        // Abrimos la base de datos
+        return FrameworkSQLiteDatabase.openOrCreateDatabase(
+            dbFile,
+            null,
+            object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(1) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    // No hacemos nada, la BD ya está creada
+                }
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                    // Sin migraciones por ahora
+                }
+            }
+        )
     }
 
     private fun copyDatabase(context: Context, dbFile: File) {
