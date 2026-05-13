@@ -1,7 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("kotlin-kapt")
+    id("com.google.devtools.ksp") // Reemplaza kotlin-kapt
 }
 
 android {
@@ -19,7 +19,10 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
         debug {
             applicationIdSuffix = ".debug"
@@ -49,7 +52,7 @@ dependencies {
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
-    kapt("androidx.room:room-compiler:$room_version")
+    ksp("androidx.room:room-compiler:$room_version") // kapt reemplazado por ksp
 
     // Paging 3
     val paging_version = "3.2.1"
