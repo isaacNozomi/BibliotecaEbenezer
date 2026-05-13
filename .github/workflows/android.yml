@@ -1,4 +1,4 @@
-name: Biblioteca Ebenezer - Construcción Profesional
+name: Biblioteca Ebenezer – Ensamblaje Profesional
 
 on:
   push:
@@ -11,24 +11,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Descargar código fuente
+      # 1. Obtener el código fuente
+      - name: 📥 Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: ☕ Configurar Java 17
+      # 2. Configurar Java 17 con cache de Gradle automática
+      - name: ☕ Configurar JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: 🔧 Dar permisos al wrapper de Gradle
-        run: chmod +x gradlew
+      # 3. Inyectar el sistema de compilación Gradle oficial
+      - name: ⚙️ Instalar y configurar Gradle
+        uses: gradle/actions/setup-gradle@v3
 
-      - name: 🏗️ Construir APK de depuración
-        run: ./gradlew assembleDebug --no-daemon
+      # 4. Compilar el APK de depuración
+      - name: 🏗️ Construir APK debug
+        run: gradle assembleDebug
 
-      - name: 📦 Subir el APK como artefacto
+      # 5. Subir el APK como artefacto (solo si existe)
+      - name: 📦 Entregar APK
         uses: actions/upload-artifact@v4
         with:
           name: BibliotecaEbenezer-APK
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error   # Falla si no hay APK, para que sepas que algo salió mal
