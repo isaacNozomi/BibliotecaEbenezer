@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Fondo adaptable -->
+    <path
+        android:fillColor="#1E88E5"
+        android:pathData="M0,0h108v108H0z"/>
+    <!-- Páginas del libro -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,30h20l4,4v44l-12,-4l-12,4V30z"/>
+    <path
+        android:fillColor="#E0E0E0"
+        android:pathData="M32,32h16v40l-8,-2.67V32H32z M52,34h2v36l-2,-0.67V34z"/>
+</vector>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Círculo de fondo -->
+    <path
+        android:fillColor="#1E88E5"
+        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"/>
+    <!-- Libro centrado -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,38h16l3.2,3.2v35.2l-9.6,-3.2l-9.6,3.2V38z"/>
+    <path
+        android:fillColor="#E0E0E0"
+        android:pathData="M39.6,39.6h12.8v32l-6.4,-2.13V39.6H39.6z M55.6,41.2h1.6v28.8l-1.6,-0.53V41.2z"/>
+</vector>
