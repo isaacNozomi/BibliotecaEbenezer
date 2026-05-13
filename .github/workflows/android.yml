@@ -8,13 +8,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up JDK 17
+      
+      - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
       
-      - name: Dar permiso al constructor
+      # ESTA ES LA PIEZA NUEVA: Le pedimos a GitHub que traiga el motor oficial
+      - name: Descargar Motor Android Oficial
+        run: gradle wrapper
+        
+      - name: Dar permiso al motor
         run: chmod +x gradlew
         
       - name: Fabricar APK
