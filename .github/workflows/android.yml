@@ -1,7 +1,9 @@
-name: Fabrica Ebenezer Profesional
+name: Biblioteca Ebenezer - Construcción Profesional
 
 on:
   push:
+    branches: [ "main" ]
+  pull_request:
     branches: [ "main" ]
 
 jobs:
@@ -9,23 +11,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Extraer codigo del ensamblador
-      uses: actions/checkout@v4
+      - name: 📥 Descargar código fuente
+        uses: actions/checkout@v4
 
-    - name: Preparar el entorno Java
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - name: ☕ Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
 
-    - name: Iniciar Motor Oficial Robusto
-      uses: gradle/actions/setup-gradle@v3
+      - name: 🔧 Dar permisos al wrapper de Gradle
+        run: chmod +x gradlew
 
-    - name: Ensamblar APK Final
-      run: gradle assembleDebug
+      - name: 🏗️ Construir APK de depuración
+        run: ./gradlew assembleDebug --no-daemon
 
-    - name: Entregar App lista
-      uses: actions/upload-artifact@v4
-      with:
-        name: App-Ebenezer
-        path: app/build/outputs/apk/debug/*.apk
+      - name: 📦 Subir el APK como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: BibliotecaEbenezer-APK
+          path: app/build/outputs/apk/debug/*.apk
