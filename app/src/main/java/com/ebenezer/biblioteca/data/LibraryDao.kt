@@ -2,6 +2,7 @@ package com.ebenezer.biblioteca.data
 
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -42,30 +43,33 @@ class LibraryDao(private val db: SQLiteDatabase) {
     }
 
     fun search(query: String): Flow<List<SearchResult>> = flow {
-        val list = mutableListOf<SearchResult>()
-        db.rawQuery("""
-            SELECT p.id, p.libro_id, p.numero_parrafo,
-                   snippet(parrafos_fts, 0, '<b>', '</b>', '...', 32) AS snippet,
-                   l.titulo
-            FROM parrafos_fts
-            JOIN parrafos p ON parrafos_fts.rowid = p.id
-            JOIN libros l ON p.libro_id = l.id
-            WHERE parrafos_fts MATCH ?
-            ORDER BY rank
-        """, arrayOf(query)).use { cursor ->
-            while (cursor.moveToNext()) {
-                list.add(
-                    SearchResult(
+        try {
+            val list = mutableListOf<SearchResult>()
+            db.rawQuery("""
+                SELECT p.id, p.libro_id, p.numero_parrafo,
+                       snippet(parrafos_fts, 0, '<b>', '</b>', '...', 32) AS snippet,
+                       l.titulo
+                FROM parrafos_fts
+                JOIN parrafos p ON parrafos_fts.rowid = p.id
+                JOIN libros l ON p.libro_id = l.id
+                WHERE parrafos_fts MATCH ?
+                ORDER BY rank
+            """, arrayOf(query)).use { cursor ->
+                while (cursor.moveToNext()) {
+                    list.add(SearchResult(
                         id = cursor.getLong(0),
                         libro_id = cursor.getLong(1),
                         numero_parrafo = cursor.getInt(2),
                         snippet = cursor.getString(3),
                         titulo = cursor.getString(4)
-                    )
-                )
+                    ))
+                }
             }
+            emit(list)
+        } catch (e: Exception) {
+            Log.e("LibraryDao", "Error en búsqueda", e)
+            emit(emptyList())  // muestra lista vacía en vez de cerrar la app
         }
-        emit(list)
     }
 }
 

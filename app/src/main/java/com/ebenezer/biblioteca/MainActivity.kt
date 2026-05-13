@@ -7,8 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -64,7 +66,6 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                 }
             } else {
                 // Pantalla de párrafos o búsqueda
-                val selectedBookId = viewModel.selectedBookId.collectAsState()
                 val paragraphs by viewModel.paragraphs.collectAsState(initial = emptyList())
                 val searchQuery = viewModel.searchQuery.collectAsState()
                 val searchResults by viewModel.searchResults.collectAsState(initial = emptyList())
@@ -81,7 +82,7 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                     )
 
                     if (searchQuery.value.length >= 2) {
-                        // Mostrar resultados de búsqueda
+                        // Resultados de búsqueda
                         LazyColumn {
                             items(searchResults) { result ->
                                 Card(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
@@ -99,15 +100,14 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                             }
                         }
                     } else {
-                        // Mostrar párrafos del libro seleccionado
-                        LazyColumn {
-                            items(paragraphs) { parrafo ->
-                                Text(
-                                    text = parrafo.contenido,
-                                    modifier = Modifier.padding(8.dp),
-                                    fontSize = 16.sp
-                                )
-                            }
+                        // Modo lectura continua (como PDF)
+                        val textoCompleto = paragraphs.joinToString("\n\n") { it.contenido }
+                        Column(
+                            modifier = Modifier
+                                .verticalScroll(rememberScrollState())
+                                .padding(16.dp)
+                        ) {
+                            Text(text = textoCompleto, fontSize = 18.sp, lineHeight = 28.sp)
                         }
                     }
                 }
