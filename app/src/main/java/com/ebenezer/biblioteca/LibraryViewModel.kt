@@ -3,8 +3,8 @@ package com.ebenezer.biblioteca
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.sqlite.db.SimpleSQLiteQuery
 import com.ebenezer.biblioteca.data.AppDatabase
-import com.ebenezer.biblioteca.data.LibraryDao
 import com.ebenezer.biblioteca.data.LibroEntity
 import com.ebenezer.biblioteca.data.ParrafoEntity
 import com.ebenezer.biblioteca.data.SearchResult
@@ -13,15 +13,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
 
 class LibraryViewModel(application: Application) : AndroidViewModel(application) {
-    private val dao: LibraryDao = AppDatabase.getDatabase(application).libraryDao()
+    private val dao = AppDatabase.getDatabase(application).libraryDao()
 
-    // Lista de libros
     val books: Flow<List<LibroEntity>> = dao.getAllBooks()
 
-    // Párrafos de un libro seleccionado
     private val _selectedBookId = MutableStateFlow<Long?>(null)
     val selectedBookId: StateFlow<Long?> = _selectedBookId
 
@@ -30,13 +27,28 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         else flowOf(emptyList())
     }
 
-    // Búsqueda
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
     val searchResults: Flow<List<SearchResult>> = _searchQuery.flatMapLatest { query ->
-        if (query.length >= 2) dao.search(query)
-        else flowOf(emptyList())
+        if (query.length >= 2) {
+            val sqlQuery = SimpleSQLiteQuery(
+                """
+                SELECT parrafos.id, parrafos.libro_id, parrafos.numero_parrafo,
+                       snippet(parrafos_fts, 0, '<b>', '</b>', '...', 32) AS snippet,
+                       libros.titulo
+                FROM parrafos_fts
+                JOIN parrafos ON parrafos_fts.rowid = parrafos.id
+                JOIN libros ON parrafos.libro_id = libros.id
+                WHERE parrafos_fts MATCH ?
+                ORDER BY rank
+                """,
+                arrayOf(query)
+            )
+            dao.searchRaw(sqlQuery)
+        } else {
+            flowOf(emptyList())
+        }
     }
 
     fun selectBook(bookId: Long) {
