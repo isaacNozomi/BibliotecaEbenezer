@@ -9,7 +9,6 @@ import androidx.room.RoomDatabase
     entities = [
         LibroEntity::class,
         ParrafoEntity::class
-        // ParrafoFtsEntity::class  <-- ELIMINADO
     ],
     version = 1,
     exportSchema = false
