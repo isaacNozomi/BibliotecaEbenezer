@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.BibliotecaEbenezer" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Puedes dejar esta línea vacía o agregar personalizaciones -->
+    </style>
+</resources>
