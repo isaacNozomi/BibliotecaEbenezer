@@ -71,7 +71,7 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                     items(books) { book ->
                         ListItem(
                             headlineContent = { Text(book.titulo, fontWeight = FontWeight.Bold) },
-                            supportingContent = { Text("Código: ${book.codigo}") },
+                            supportingContent = { Text(book.codigo) },
                             modifier = Modifier.clickable {
                                 viewModel.selectBook(book.id)
                                 selectedBookTitle = book.titulo
