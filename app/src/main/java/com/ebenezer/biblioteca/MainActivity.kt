@@ -7,10 +7,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -35,37 +36,52 @@ class MainActivity : ComponentActivity() {
 fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
     MaterialTheme {
         var showBooks by remember { mutableStateOf(true) }
+        var selectedBookTitle by remember { mutableStateOf("") }
         val focusManager = LocalFocusManager.current
 
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Biblioteca Ebenezer") },
+                    title = {
+                        if (showBooks) Text("Biblioteca Ebenezer")
+                        else Text(selectedBookTitle.take(30))
+                    },
+                    navigationIcon = {
+                        // Solo mostrar flecha de retroceso cuando estamos leyendo un libro
+                        if (!showBooks) {
+                            IconButton(onClick = { showBooks = true }) {
+                                Icon(ArrowBack, contentDescription = "Volver")
+                            }
+                        }
+                    },
                     actions = {
-                        TextButton(onClick = { showBooks = !showBooks }) {
-                            Text(if (showBooks) "Buscar" else "Libros")
+                        if (showBooks) {
+                            TextButton(onClick = { showBooks = false }) {
+                                Text("Buscar")
+                            }
                         }
                     }
                 )
             }
         ) { padding ->
             if (showBooks) {
-                // Pantalla de libros
+                // Pantalla de lista de libros
                 val books by viewModel.books.collectAsState(initial = emptyList())
                 LazyColumn(modifier = Modifier.padding(padding)) {
                     items(books) { book ->
                         ListItem(
-                            headlineContent = { Text(book.titulo) },
+                            headlineContent = { Text(book.titulo, fontWeight = FontWeight.Bold) },
                             supportingContent = { Text("Código: ${book.codigo}") },
                             modifier = Modifier.clickable {
                                 viewModel.selectBook(book.id)
+                                selectedBookTitle = book.titulo
                                 showBooks = false
                             }
                         )
                     }
                 }
             } else {
-                // Pantalla de párrafos o búsqueda
+                // Pantalla de lectura del libro
                 val paragraphs by viewModel.paragraphs.collectAsState(initial = emptyList())
                 val searchQuery = viewModel.searchQuery.collectAsState()
                 val searchResults by viewModel.searchResults.collectAsState(initial = emptyList())
@@ -75,7 +91,7 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                     OutlinedTextField(
                         value = searchQuery.value,
                         onValueChange = { viewModel.updateSearchQuery(it) },
-                        label = { Text("Buscar en todos los libros") },
+                        label = { Text("Buscar en este libro") },
                         modifier = Modifier.fillMaxWidth().padding(8.dp),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
@@ -92,7 +108,7 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = result.snippet.replace("<b>", "**").replace("</b>", "**"),
+                                            text = result.snippet.replace("<b>", "").replace("</b>", ""),
                                             fontSize = 14.sp
                                         )
                                     }
@@ -100,14 +116,56 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                             }
                         }
                     } else {
-                        // Modo lectura continua (como PDF)
-                        val textoCompleto = paragraphs.joinToString("\n\n") { it.contenido }
-                        Column(
-                            modifier = Modifier
-                                .verticalScroll(rememberScrollState())
-                                .padding(16.dp)
+                        // Modo lectura con LazyColumn (no colapsa)
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp)
                         ) {
-                            Text(text = textoCompleto, fontSize = 18.sp, lineHeight = 28.sp)
+                            // Encabezado con el título del libro
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                                ) {
+                                    Text(
+                                        text = selectedBookTitle,
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                }
+                            }
+                            // Párrafos del libro
+                            itemsIndexed(paragraphs) { index, parrafo ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        // Mostrar número de párrafo si existe
+                                        if (parrafo.numero_parrafo > 0) {
+                                            Text(
+                                                text = "§ ${parrafo.numero_parrafo}",
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                        }
+                                        // Detectar si es un título (mayúsculas y corto)
+                                        val esTitulo = parrafo.contenido.length < 80 &&
+                                                parrafo.contenido.uppercase() == parrafo.contenido &&
+                                                parrafo.contenido.matches(Regex(".*[A-ZÁÉÍÓÚÜÑ].*"))
+                                        Text(
+                                            text = parrafo.contenido,
+                                            fontSize = if (esTitulo) 20.sp else 16.sp,
+                                            fontWeight = if (esTitulo) FontWeight.Bold else FontWeight.Normal,
+                                            lineHeight = 26.sp,
+                                            color = if (esTitulo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

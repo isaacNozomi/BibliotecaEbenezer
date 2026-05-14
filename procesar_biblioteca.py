@@ -7,122 +7,212 @@ from pathlib import Path
 # Configuración
 CARPETA_PDFS = "mis_libros"
 DB_PATH = "app/src/main/assets/database/biblioteca.db"
-TAMANO_MAX_PARRAFO = 2000  # caracteres máximos por párrafo (ajustable)
-DEBUG = True  # Muestra logs detallados
+TAMANO_MAX_PARRAFO = 10000  # caracteres máximos por párrafo
+DEBUG = True
 
 def log(msg):
     if DEBUG:
         print(f"[INFO] {msg}")
 
 def limpiar_texto(texto):
-    """Limpia el texto eliminando caracteres no deseados y normalizando espacios."""
+    """Limpia caracteres de control y normaliza espacios."""
     if not texto:
         return ""
-    # Eliminar caracteres de control (excepto saltos de línea y tabuladores)
     texto = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', texto)
-    # Reemplazar múltiples saltos de línea por un solo (para preservar párrafos)
     texto = re.sub(r'\n\s*\n', '\n\n', texto)
-    # Reemplazar múltiples espacios por uno solo
     texto = re.sub(r'[ \t]+', ' ', texto)
-    # Eliminar espacios al inicio y final
-    texto = texto.strip()
-    return texto
+    return texto.strip()
 
 def es_linea_basura(linea):
-    """Detecta líneas que son números de página, encabezados repetitivos o pies."""
+    """Detecta líneas que deben eliminarse (páginas, derechos de autor, etc.)"""
     linea_limpia = linea.strip()
     if not linea_limpia:
         return False
-    # Números de página solos (ej: "1", "2", " 3 ")
-    if re.match(r'^\s*\d+\s*$', linea_limpia):
+    if re.match(r'^\s*\d+\s*$', linea_limpia):  # números de página solos
         return True
-    # Frases comunes de encabezado/pie (personalizar según necesidad)
     patrones_basura = [
-        r'^===== Page \d+ =====$',
-        r'^LAS SIETE EDADES DE LA IGLESIA$',
-        r'^William Marrion Branham$',
-        r'^www\.branham\.org$',
-        r'^P\.O\. Box \d+',
-        r'^Todos los derechos reservados\.',
-        r'^GRABACIONES “LA VOZ DE DIOS”',
-        r'^Nota Sobre Los Derechos de Autor',
-        r'^Para obtener mayores informes',
-        r'^Voice of God Recordings',
-        r'^SPANISH',
-        r'^Existen más de \d+ sermones',
+        r'^===== Page \d+ =====$', r'^LAS SIETE EDADES DE LA IGLESIA$',
+        r'^William Marrion Branham$', r'^www\.branham\.org$', r'^P\.O\. Box \d+',
+        r'^Todos los derechos reservados\.', r'^GRABACIONES “LA VOZ DE DIOS”',
+        r'^Nota Sobre Los Derechos de Autor', r'^Voice of God Recordings',
+        r'^SPANISH', r'^Existen más de \d+ sermones', r'^©20\d{2} VGR',
+        r'^Este Mensaje por el Hermano', r'^SPN\d{2}-\d{4}'
     ]
     for patron in patrones_basura:
         if re.search(patron, linea_limpia, re.IGNORECASE):
             return True
     return False
 
-def extraer_parrafos_inteligente(texto_pagina):
+def extraer_titulo_desde_pdf(doc):
     """
-    Divide el texto en párrafos lógicos.
-    Estrategia: primero dividir por doble salto de línea,
-    luego por puntos seguidos de mayúscula cuando sea necesario.
+    Intenta extraer el título real del libro desde las primeras páginas.
+    Busca patrones como "UNA EXPOSICIÓN DE LAS SIETE EDADES", etc.
     """
-    if not texto_pagina:
-        return []
+    texto_primeras_paginas = ""
+    for i in range(min(5, len(doc))):
+        texto_primeras_paginas += doc[i].get_text()
     
-    # Dividir por doble salto de línea (párrafos típicos)
+    # Patrones de títulos en español (ajústalos según tus libros)
+    patrones_titulo = [
+        r'UNA EXPOSICIÓN DE LAS SIETE EDADES DE LA IGLESIA',
+        r'La Deidad De Jesucristo',
+        r'Fe Es La Sustancia',
+        r'Los Principios De La Sanidad Divina',
+        r'Creyendo A Dios',
+        r'Mi Ángel Irá Delante De Ti',
+        r'Un Filtro Para Hombres Pensantes'
+    ]
+    for patron in patrones_titulo:
+        match = re.search(patron, texto_primeras_paginas, re.IGNORECASE)
+        if match:
+            return match.group(0).title()  # devuelve el título encontrado
+    # Si no se encuentra, usar el nombre del archivo (pero limpiando código)
+    return None
+
+def tiene_parrafos_numerados(texto_muestra):
+    """
+    Detecta si el PDF usa numeración de párrafos estilo "1 texto..." o "1. texto..."
+    """
+    lineas = texto_muestra.split('\n')
+    for linea in lineas[:100]:  # analizar primeras 100 líneas
+        if re.match(r'^\s*\d+\s+[A-ZÁÉÍÓÚÜÑ]', linea):
+            return True
+        if re.match(r'^\s*\d+\.\s+[A-ZÁÉÍÓÚÜÑ]', linea):
+            return True
+    return False
+
+def extraer_parrafos_numerados(texto_completo):
+    """
+    Extrae párrafos numerados del tipo:
+    1 Este es el contenido...
+    2 Otro párrafo...
+    Devuelve lista de (numero, contenido)
+    """
+    patron = r'\n\s*(\d+)\s+(.+?)(?=\n\s*\d+\s+|\Z)'
+    matches = re.findall(patron, texto_completo, re.DOTALL)
+    if not matches:
+        # Intentar con formato "1. "
+        patron2 = r'\n\s*(\d+)\.\s+(.+?)(?=\n\s*\d+\.\s+|\Z)'
+        matches = re.findall(patron2, texto_completo, re.DOTALL)
+    
+    resultados = []
+    for num, cont in matches:
+        cont = limpiar_texto(cont)
+        if cont:
+            resultados.append((int(num), cont))
+    return resultados
+
+def extraer_parrafos_no_numerados(texto_pagina):
+    """Divide el texto en párrafos por doble salto de línea, sin números."""
     bloques = re.split(r'\n\s*\n', texto_pagina)
     parrafos = []
-    
     for bloque in bloques:
         bloque = bloque.strip()
         if not bloque:
             continue
-        
-        # Si el bloque es muy largo, intentar dividir por oraciones (punto + espacio + mayúscula)
         if len(bloque) > TAMANO_MAX_PARRAFO:
-            # Dividir por punto seguido de espacio y mayúscula, pero conservando el punto
+            # dividir en oraciones
             oraciones = re.split(r'(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÜÑ])', bloque)
-            parrafo_actual = []
-            longitud_actual = 0
             for oracion in oraciones:
-                if longitud_actual + len(oracion) < TAMANO_MAX_PARRAFO:
-                    parrafo_actual.append(oracion)
-                    longitud_actual += len(oracion)
-                else:
-                    if parrafo_actual:
-                        parrafos.append(' '.join(parrafo_actual))
-                    parrafo_actual = [oracion]
-                    longitud_actual = len(oracion)
-            if parrafo_actual:
-                parrafos.append(' '.join(parrafo_actual))
+                if oracion.strip():
+                    parrafos.append(oracion.strip())
         else:
             parrafos.append(bloque)
-    
     return parrafos
 
 def limpiar_pagina(texto_pagina):
-    """Limpia una página completa eliminando líneas basura y normalizando."""
+    """Elimina líneas basura y une palabras cortadas por guión."""
     lineas = texto_pagina.split('\n')
     lineas_limpias = []
     i = 0
     while i < len(lineas):
         linea = lineas[i].rstrip()
-        # Si la línea termina con guión y la siguiente existe, unirlas
+        # Unir palabras cortadas por guión
         if linea.endswith('-') and i+1 < len(lineas):
             siguiente = lineas[i+1].lstrip()
             linea = linea.rstrip('-') + siguiente
-            i += 1  # saltar la siguiente línea porque ya la unimos
+            i += 1
         if not es_linea_basura(linea):
             lineas_limpias.append(linea)
         i += 1
-    
     texto_unido = ' '.join(lineas_limpias)
-    # Reemplazar guiones silábicos que pudieran haber quedado
     texto_unido = re.sub(r'(\w+)-\s+(\w+)', r'\1\2', texto_unido)
     return limpiar_texto(texto_unido)
 
+def procesar_pdf(conn, ruta_pdf):
+    log(f"Procesando: {ruta_pdf}")
+    doc = fitz.open(ruta_pdf)
+    
+    # Extraer título real desde el contenido del PDF
+    titulo_real = extraer_titulo_desde_pdf(doc)
+    nombre_archivo = Path(ruta_pdf).stem
+    # Extraer código (ej: SPN47-0412) del nombre del archivo
+    codigo_match = re.search(r'(SPN\d{2}-\d{4})', nombre_archivo)
+    codigo = codigo_match.group(1) if codigo_match else nombre_archivo.split()[0]
+    
+    # Si no se encontró título en español, usar el nombre del archivo sin el código
+    if not titulo_real:
+        titulo_real = re.sub(r'^SPN\d{2}-\d{4}\s*', '', nombre_archivo).replace('_', ' ').title()
+    
+    # Insertar libro
+    cur = conn.cursor()
+    cur.execute("INSERT INTO libros (titulo, codigo, fecha) VALUES (?, ?, ?)",
+                (titulo_real, codigo, '2025'))
+    libro_id = cur.lastrowid
+    conn.commit()
+    
+    # Recopilar todo el texto para decidir método de extracción
+    texto_completo = ""
+    for num_pag in range(len(doc)):
+        texto_completo += doc[num_pag].get_text() + "\n"
+    
+    tiene_numeracion = tiene_parrafos_numerados(texto_completo)
+    log(f"¿Tiene numeración de párrafos? {tiene_numeracion}")
+    
+    numero_parrafo_db = 1
+    total_parrafos = 0
+    
+    if tiene_numeracion:
+        # Extraer párrafos numerados
+        parrafos_numerados = extraer_parrafos_numerados(texto_completo)
+        for num_original, contenido in parrafos_numerados:
+            if len(contenido) > TAMANO_MAX_PARRAFO:
+                contenido = contenido[:TAMANO_MAX_PARRAFO]
+            cur.execute("INSERT INTO parrafos (libro_id, numero_parrafo, contenido) VALUES (?, ?, ?)",
+                        (libro_id, num_original, contenido))
+            total_parrafos += 1
+            if total_parrafos % 100 == 0:
+                conn.commit()
+    else:
+        # Procesar página por página (sin numeración)
+        for num_pagina in range(len(doc)):
+            pagina = doc[num_pagina]
+            texto_raw = pagina.get_text()
+            texto_limpio = limpiar_pagina(texto_raw)
+            if not texto_limpio:
+                continue
+            parrafos = extraer_parrafos_no_numerados(texto_limpio)
+            for parrafo in parrafos:
+                if not parrafo:
+                    continue
+                if len(parrafo) > TAMANO_MAX_PARRAFO:
+                    parrafo = parrafo[:TAMANO_MAX_PARRAFO]
+                cur.execute("INSERT INTO parrafos (libro_id, numero_parrafo, contenido) VALUES (?, ?, ?)",
+                            (libro_id, numero_parrafo_db, parrafo))
+                numero_parrafo_db += 1
+                total_parrafos += 1
+                if total_parrafos % 100 == 0:
+                    conn.commit()
+            conn.commit()
+    
+    doc.close()
+    log(f"Libro '{titulo_real}' procesado: {total_parrafos} párrafos insertados.")
+    return total_parrafos
+
 def inicializar_db():
-    """Crea las tablas y triggers si no existen."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    # Eliminar tablas existentes para regenerar (opcional, pero recomendado)
     cur.execute("DROP TABLE IF EXISTS libros")
     cur.execute("DROP TABLE IF EXISTS parrafos")
     cur.execute("DROP TABLE IF EXISTS parrafos_fts")
@@ -151,7 +241,6 @@ def inicializar_db():
             tokenize='unicode61'
         )
     """)
-    # Triggers para mantener FTS sincronizado
     cur.execute("""
         CREATE TRIGGER IF NOT EXISTS parrafos_ai AFTER INSERT ON parrafos BEGIN
             INSERT INTO parrafos_fts(rowid, contenido) VALUES (new.id, new.contenido);
@@ -171,84 +260,26 @@ def inicializar_db():
     conn.commit()
     return conn
 
-def procesar_pdf(conn, ruta_pdf):
-    """Procesa un solo PDF, extrayendo párrafos y guardándolos en BD."""
-    log(f"Procesando: {ruta_pdf}")
-    doc = fitz.open(ruta_pdf)
-    titulo = Path(ruta_pdf).stem  # nombre sin extensión
-    codigo = titulo.split(' ')[0] if titulo else "LIB"
-    
-    # Insertar libro
-    cur = conn.cursor()
-    cur.execute("INSERT INTO libros (titulo, codigo, fecha) VALUES (?, ?, ?)", 
-                (titulo, codigo, '2025'))
-    libro_id = cur.lastrowid
-    conn.commit()
-    
-    numero_parrafo = 1
-    total_parrafos = 0
-    
-    # Procesar página por página
-    for num_pagina in range(len(doc)):
-        pagina = doc[num_pagina]
-        texto_raw = pagina.get_text()
-        texto_limpio_pagina = limpiar_pagina(texto_raw)
-        if not texto_limpio_pagina:
-            continue
-        
-        parrafos = extraer_parrafos_inteligente(texto_limpio_pagina)
-        
-        for parrafo in parrafos:
-            if not parrafo:
-                continue
-            # Limitar tamaño para evitar problemas en FTS5
-            if len(parrafo) > 10000:
-                log(f"Párrafo muy largo ({len(parrafo)} chars), truncando...")
-                parrafo = parrafo[:10000]
-            cur.execute("""
-                INSERT INTO parrafos (libro_id, numero_parrafo, contenido)
-                VALUES (?, ?, ?)
-            """, (libro_id, numero_parrafo, parrafo))
-            numero_parrafo += 1
-            total_parrafos += 1
-            # Commit cada 100 párrafos para no saturar la memoria
-            if total_parrafos % 100 == 0:
-                conn.commit()
-        
-        # Commit por página
-        conn.commit()
-    
-    doc.close()
-    log(f"Libro '{titulo}' procesado: {total_parrafos} párrafos insertados.")
-    return total_parrafos
-
 def procesar():
-    """Función principal: procesa todos los PDFs en la carpeta."""
     conn = inicializar_db()
     archivos_pdf = [f for f in os.listdir(CARPETA_PDFS) if f.lower().endswith('.pdf')]
     if not archivos_pdf:
-        log(f"No se encontraron archivos PDF en la carpeta '{CARPETA_PDFS}'")
+        log(f"No se encontraron PDFs en '{CARPETA_PDFS}'")
         conn.close()
         return
-    
     total_general = 0
     for archivo in archivos_pdf:
-        ruta_completa = os.path.join(CARPETA_PDFS, archivo)
+        ruta = os.path.join(CARPETA_PDFS, archivo)
         try:
-            num = procesar_pdf(conn, ruta_completa)
-            total_general += num
+            total_general += procesar_pdf(conn, ruta)
         except Exception as e:
-            log(f"Error procesando {archivo}: {e}")
-            # Continuar con el siguiente archivo
-            continue
-    
+            log(f"Error con {archivo}: {e}")
     conn.commit()
-    # Optimizar la base de datos (vacuum) después de insertar muchos datos
-    log("Optimizando base de datos...")
+    log("Optimizando BD...")
     conn.execute("VACUUM")
     conn.close()
-    log(f"Procesamiento completado. Total de párrafos insertados: {total_general}")
-    print("Base de datos generada con FTS5 activado y limpieza de texto mejorada.")
+    log(f"Procesamiento completado. Total párrafos: {total_general}")
+    print("Base de datos generada exitosamente.")
 
 if __name__ == "__main__":
     procesar()
