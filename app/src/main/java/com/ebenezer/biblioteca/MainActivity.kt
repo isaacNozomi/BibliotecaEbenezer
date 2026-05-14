@@ -145,7 +145,7 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                                         // Mostrar número de párrafo si existe (para libros como "Siete Edades")
                                         if (parrafo.numero_parrafo > 0) {
                                             Text(
-                                                text = "§ ${parrafo.numero_parrafo}",
+                                                text = "${parrafo.numero_parrafo}",
                                                 fontSize = 12.sp,
                                                 color = MaterialTheme.colorScheme.primary,
                                                 fontWeight = FontWeight.Bold

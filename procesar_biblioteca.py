@@ -4,7 +4,6 @@ import os
 import re
 from pathlib import Path
 
-# ================= CONFIGURACIÓN =================
 CARPETA_PDFS = "mis_libros"
 DB_PATH = "app/src/main/assets/database/biblioteca.db"
 DEBUG = True
@@ -13,174 +12,171 @@ def log(msg):
     if DEBUG:
         print(f"[INFO] {msg}")
 
-# ================= LIMPIEZA DE BASURA =================
+# ------------------------------------------------------------
+# LIMPIEZA Y CLASIFICACIÓN
+# ------------------------------------------------------------
 def es_linea_basura(linea):
-    """Detecta líneas que deben eliminarse por completo (números de página, encabezados, copyright, etc.)"""
+    """Detecta líneas que deben eliminarse por completo."""
     l = linea.strip()
     if not l:
         return True
     # Números de página solos
     if re.match(r'^\d+$', l):
         return True
-    # Patrones fijos de basura
-    basura = [
+    patrones_basura = [
         r'^===== Page \d+ =====$', r'^LA PALABRA HABLADA$', r'^SPANISH$',
         r'©20\d{2} VGR', r'GRABACIONES "LA VOZ DE DIOS"', r'P\.O\. BOX \d+',
         r'www\.branham\.org', r'Todos los derechos reservados',
         r'Nota Sobre Los Derechos de Autor', r'Voice of God Recordings',
-        r'^Este Mensaje por el Hermano', r'^SPN\d{2}-\d{4} \w+',
-        r'^EL CAMINO DE DIOS',  # para no confundir con título principal (lo tratamos aparte)
+        r'^Este Mensaje por el Hermano', r'^SPN\d{2}-\d{4}\s+\w+',
+        r'^\d+\s+LA\s+PALABRA\s+HABLADA',
     ]
-    for patron in basura:
-        if re.search(patron, l, re.IGNORECASE):
+    for pat in patrones_basura:
+        if re.search(pat, l, re.IGNORECASE):
             return True
     return False
 
-def limpiar_markdown(texto_md):
+def limpiar_markdown(md_texto, titulo_principal=""):
     """
-    Elimina líneas basura, símbolos markdown sobrantes y normaliza.
-    Conserva las citas (líneas que empiezan con '>') y los números de párrafo.
+    Elimina líneas basura, símbolos markdown molestos,
+    y evita duplicar el título principal.
     """
-    lineas = texto_md.split('\n')
+    lineas = md_texto.split('\n')
     lineas_limpias = []
     for linea in lineas:
         if es_linea_basura(linea):
             continue
-        # Eliminar símbolos markdown que no queremos (#, *, _, etc.) pero respetando '>' y números
-        # No eliminar números de párrafo al inicio de línea (ej "2 ")
-        # Pero sí eliminar '#' de encabezados (ya los capturamos como título aparte)
-        if linea.startswith('#'):
-            linea = re.sub(r'^#+\s*', '', linea)
-        # Eliminar énfasis markdown pero conservar el texto interno
+        # Eliminar cabeceras markdown (#, ##, etc.)
+        linea = re.sub(r'^#{1,6}\s*', '', linea)
+        # Eliminar énfasis _texto_ y *texto* (pero conservar el texto interno)
         linea = re.sub(r'[*_]([^*_]+)[*_]', r'\1', linea)
-        # Quitar espacios múltiples
-        linea = re.sub(r'[ \t]+', ' ', linea)
-        lineas_limpias.append(linea)
+        # Eliminar negritas dobles
+        linea = re.sub(r'\*\*([^*]+)\*\*', r'\1', linea)
+        # Si la línea es exactamente el título principal (evitar duplicado)
+        if titulo_principal and linea.strip().lower() == titulo_principal.lower():
+            continue
+        if linea.strip():
+            lineas_limpias.append(linea)
     return '\n'.join(lineas_limpias)
 
-def extraer_titulo_y_codigo_desde_pdf(ruta_pdf, nombre_archivo):
+def extraer_titulo_y_codigo(ruta_pdf, nombre_archivo):
     """
-    Extrae el título real y el código del libro.
-    Prioridad: 
-      1. Buscar en el texto del PDF una línea que parezca título (mayúsculas, longitud media)
-      2. Si no, usar el nombre del archivo (sin extensión) y limpiarlo.
-    El código (SPNxx-xxxx) lo extrae del nombre del archivo o del interior.
+    Devuelve (codigo, titulo_principal) donde titulo_principal es el título real en español.
     """
-    doc = pymupdf4llm.to_markdown(ruta_pdf, page_chunks=False, write_images=False, use_llm=False)
-    if not doc:
-        # Fallback: solo con nombre de archivo
+    # Primero extraemos el markdown para buscar el título
+    md = pymupdf4llm.to_markdown(ruta_pdf, page_chunks=False, write_images=False, use_llm=False)
+    if not md:
+        # Fallback: usar nombre de archivo
         nombre = Path(nombre_archivo).stem
-        match = re.search(r'(SPN\d{2}-\d{4})', nombre)
-        codigo = match.group(1) if match else "SPN00-0000"
+        codigo_match = re.search(r'(SPN\d{2}-\d{4})', nombre)
+        codigo = codigo_match.group(1) if codigo_match else "SPN00-0000"
         titulo = re.sub(r'^SPN\d{2}-\d{4}\s*', '', nombre).replace('_', ' ').strip().upper()
         return codigo, titulo
 
-    # Buscar título: primera línea no vacía, en mayúsculas, con longitud entre 10 y 100, que no sea basura
-    lineas = doc.split('\n')
-    titulo_candidato = None
-    for linea in lineas:
+    # Buscar código en el markdown o en el nombre
+    codigo_match = re.search(r'(SPN\d{2}-\d{4})', md)
+    if not codigo_match:
+        codigo_match = re.search(r'(SPN\d{2}-\d{4})', nombre_archivo)
+    codigo = codigo_match.group(1) if codigo_match else "SPN00-0000"
+
+    # Buscar título real: primera línea no vacía, no basura, en mayúsculas, longitud razonable
+    titulo = None
+    for linea in md.split('\n'):
         l = linea.strip()
-        if len(l) > 10 and len(l) < 100 and l.isupper() and not es_linea_basura(l):
-            # Evitar falsos como "LA PALABRA HABLADA"
-            if not re.search(r'PALABRA|HABLADA|DERECHOS|COPYRIGHT', l, re.IGNORECASE):
-                titulo_candidato = l
+        if len(l) > 10 and len(l) < 150 and l.isupper():
+            # evitar falsos positivos
+            if not re.search(r'PALABRA|HABLADA|DERECHOS|COPYRIGHT|SPN\d{2}-\d{4}', l, re.IGNORECASE):
+                titulo = l
                 break
-    # Si no se encuentra, usar nombre de archivo limpio
-    if not titulo_candidato:
-        nombre = Path(nombre_archivo).stem
-        titulo_candidato = re.sub(r'^SPN\d{2}-\d{4}\s*', '', nombre).replace('_', ' ').strip().upper()
-    # Extraer código
-    match = re.search(r'(SPN\d{2}-\d{4})', nombre_archivo)
-    codigo = match.group(1) if match else "SPN00-0000"
-    return codigo, titulo_candidato
+    if not titulo:
+        # fallback: usar nombre de archivo
+        titulo = Path(nombre_archivo).stem
+        titulo = re.sub(r'^SPN\d{2}-\d{4}\s*', '', titulo).replace('_', ' ').strip().upper()
+    return codigo, titulo
 
-def clasificar_bloque(bloque):
+def clasificar_bloque(bloque, titulo_principal=""):
     """
-    Dado un bloque de texto (puede ser varias líneas), determina su tipo:
-    0 = normal
-    1 = título interno (línea corta en mayúsculas)
-    2 = cita bíblica (comienza con '>' o está indentada)
-    También extrae el número de párrafo si lo tiene al inicio.
-    Devuelve (numero_parrafo, contenido_limpio, tipo)
+    Analiza un bloque (párrafo) y devuelve (numero, contenido_limpio, tipo)
+    tipo: 0 normal, 1 título interno, 2 cita bíblica
     """
-    linea_inicial = bloque.split('\n')[0].strip()
-    # Detectar cita: línea que empieza con '>' (markdown de blockquote) o que tiene indentación
-    if linea_inicial.startswith('>'):
+    lineas = bloque.split('\n')
+    if not lineas:
+        return 0, "", 0
+
+    primera = lineas[0].strip()
+    # Detectar cita bíblica: la primera línea empieza con '>' (markdown blockquote)
+    if primera.startswith('>'):
         tipo = 2
-        # Quitar el '>' y espacios
+        # Quitar todos los '>' del bloque
         contenido = re.sub(r'^>\s*', '', bloque, flags=re.MULTILINE)
-    elif linea_inicial.isupper() and len(linea_inicial) < 80 and not re.search(r'\d', linea_inicial):
-        # Posible título interno
-        tipo = 1
-        contenido = bloque
     else:
-        tipo = 0
-        contenido = bloque
+        # Detectar título interno: primera línea corta, mayúsculas, sin números
+        if (len(primera) < 80 and primera.isupper() and not re.search(r'\d', primera) and
+            not re.search(r'copyright|derechos', primera, re.IGNORECASE)):
+            tipo = 1
+            contenido = bloque
+        else:
+            tipo = 0
+            contenido = bloque
 
-    # Extraer número de párrafo (si existe al inicio del contenido)
-    match = re.match(r'^\s*(\d+)(?:\.|\s)', contenido)
+    # Extraer número de párrafo si está al inicio
+    contenido = contenido.strip()
+    num = 0
+    match = re.match(r'^(\d+)(?:\.|\s+|\))', contenido)
     if match:
         num = int(match.group(1))
-        # Eliminar el número del contenido
-        contenido = re.sub(r'^\s*\d+(?:\.|\s)', '', contenido).strip()
-    else:
-        num = 0  # luego se asignará correlativo si es necesario
+        contenido = re.sub(r'^\d+(?:\.|\s+|\))', '', contenido).strip()
 
-    # Limpiar residuos de markdown dentro del contenido
+    # Limpiar símbolos markdown residuales (sin dañar [] ni ...)
     contenido = re.sub(r'[*_]([^*_]+)[*_]', r'\1', contenido)
-    # Eliminar múltiples espacios
-    contenido = re.sub(r'[ \t]+', ' ', contenido)
-    return num, contenido.strip(), tipo
+    contenido = re.sub(r'\*\*([^*]+)\*\*', r'\1', contenido)
+    contenido = re.sub(r'#{1,6}\s*', '', contenido)
+
+    return num, contenido, tipo
 
 def procesar_pdf(conn, ruta_pdf):
     log(f"Procesando: {ruta_pdf}")
     nombre_archivo = Path(ruta_pdf).name
 
-    # 1. Extraer código y título principal
-    codigo, titulo_principal = extraer_titulo_y_codigo_desde_pdf(ruta_pdf, nombre_archivo)
-    titulo_libro = f"{codigo} {titulo_principal}"
-    log(f"  Título extraído: {titulo_libro}")
+    # 1. Extraer código y título real
+    codigo, titulo_principal = extraer_titulo_y_codigo(ruta_pdf, nombre_archivo)
+    titulo_completo = f"{codigo} {titulo_principal}"
+    log(f"  Título extraído: {titulo_completo}")
 
-    # 2. Extraer todo el texto con layout mode (markdown)
+    # 2. Obtener markdown con layout
     md_raw = pymupdf4llm.to_markdown(ruta_pdf, page_chunks=False, write_images=False, use_llm=False)
     if not md_raw:
-        log(f"  Error: no se pudo extraer texto de {ruta_pdf}")
+        log(f"  Error: no se pudo extraer texto")
         return 0
 
-    # 3. Limpiar markdown de basura
-    texto_limpio = limpiar_markdown(md_raw)
+    # 3. Limpiar markdown (eliminar basura y título duplicado)
+    md_limpio = limpiar_markdown(md_raw, titulo_principal)
 
     # 4. Dividir en bloques (párrafos) por doble salto de línea
-    bloques = texto_limpio.split('\n\n')
-    bloques_filtrados = []
-    for b in bloques:
-        if b.strip():
-            bloques_filtrados.append(b)
+    bloques = md_limpio.split('\n\n')
+    bloques = [b.strip() for b in bloques if b.strip()]
 
-    # 5. Insertar libro en BD
+    # 5. Insertar libro en BD (título completo)
     cur = conn.cursor()
     cur.execute("INSERT INTO libros (titulo, codigo, fecha) VALUES (?, ?, ?)",
-                (titulo_libro, codigo, '2025'))
+                (titulo_completo, codigo, '2025'))
     libro_id = cur.lastrowid
     conn.commit()
 
-    # 6. Procesar cada bloque y guardar párrafos
-    num_parrafo_correlativo = 1
+    # 6. Procesar cada bloque y guardar
     total = 0
-    for bloque in bloques_filtrados:
-        # Clasificar y extraer número y tipo
-        num_original, contenido, tipo = clasificar_bloque(bloque)
+    contador_correlativo = 1
+    for bloque in bloques:
+        num_original, contenido, tipo = clasificar_bloque(bloque, titulo_principal)
         if not contenido:
             continue
-        # Si el bloque no tenía número, asignamos correlativo
+        # Si no tenía número, asignamos correlativo
         if num_original == 0:
-            num_original = num_parrafo_correlativo
-            num_parrafo_correlativo += 1
+            num_original = contador_correlativo
+            contador_correlativo += 1
         else:
-            # Si tenía número, actualizamos el correlativo para que no haya conflicto
-            num_parrafo_correlativo = max(num_parrafo_correlativo, num_original + 1)
+            contador_correlativo = max(contador_correlativo, num_original + 1)
 
-        # Guardar
         cur.execute("INSERT INTO parrafos (libro_id, numero_parrafo, contenido, tipo) VALUES (?, ?, ?, ?)",
                     (libro_id, num_original, contenido, tipo))
         total += 1
@@ -190,7 +186,9 @@ def procesar_pdf(conn, ruta_pdf):
     log(f"  -> {total} párrafos guardados.")
     return total
 
-# ================= BASE DE DATOS (con columna tipo) =================
+# ------------------------------------------------------------
+# BASE DE DATOS (con columna tipo)
+# ------------------------------------------------------------
 def inicializar_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -243,7 +241,9 @@ def inicializar_db():
     conn.commit()
     return conn
 
-# ================= PROGRAMA PRINCIPAL =================
+# ------------------------------------------------------------
+# MAIN
+# ------------------------------------------------------------
 def procesar():
     conn = inicializar_db()
     archivos = [f for f in os.listdir(CARPETA_PDFS) if f.lower().endswith('.pdf')]
