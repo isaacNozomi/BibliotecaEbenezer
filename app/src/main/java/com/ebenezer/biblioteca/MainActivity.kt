@@ -11,7 +11,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -47,10 +47,10 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                         else Text(selectedBookTitle.take(30))
                     },
                     navigationIcon = {
-                        // Solo mostrar flecha de retroceso cuando estamos leyendo un libro
+                        // Solo mostrar flecha cuando estamos leyendo un libro
                         if (!showBooks) {
                             IconButton(onClick = { showBooks = true }) {
-                                Icon(ArrowBack, contentDescription = "Volver")
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
                             }
                         }
                     },
@@ -116,12 +116,12 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                             }
                         }
                     } else {
-                        // Modo lectura con LazyColumn (no colapsa)
+                        // Modo lectura con LazyColumn (NO colapsa, carga bajo demanda)
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(16.dp)
                         ) {
-                            // Encabezado con el título del libro
+                            // Encabezado: título del libro
                             item {
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
@@ -142,7 +142,7 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        // Mostrar número de párrafo si existe
+                                        // Mostrar número de párrafo si existe (para libros como "Siete Edades")
                                         if (parrafo.numero_parrafo > 0) {
                                             Text(
                                                 text = "§ ${parrafo.numero_parrafo}",
@@ -152,7 +152,7 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                                             )
                                             Spacer(modifier = Modifier.height(4.dp))
                                         }
-                                        // Detectar si es un título (mayúsculas y corto)
+                                        // Detectar si es un título (corto y en mayúsculas)
                                         val esTitulo = parrafo.contenido.length < 80 &&
                                                 parrafo.contenido.uppercase() == parrafo.contenido &&
                                                 parrafo.contenido.matches(Regex(".*[A-ZÁÉÍÓÚÜÑ].*"))
