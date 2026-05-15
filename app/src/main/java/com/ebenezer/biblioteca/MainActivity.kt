@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -19,7 +20,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.selection.SelectionContainer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -132,12 +132,9 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                             }
 
                             itemsIndexed(paragraphs) { index, parrafo ->
-                                val esTituloInterno = (parrafo.tipo == 1) || (
-                                    parrafo.contenido.length < 80 &&
-                                    parrafo.contenido.uppercase() == parrafo.contenido &&
-                                    parrafo.contenido.matches(Regex(".*[A-ZÁÉÍÓÚÜÑ].*"))
-                                )
-                                val esCita = (parrafo.tipo == 2)
+                                // Determinar estilo según el campo tipo
+                                val esTituloInterno = parrafo.tipo == 1
+                                val esCita = parrafo.tipo == 2
 
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -153,6 +150,7 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                                             )
                                             Spacer(modifier = Modifier.height(4.dp))
                                         }
+                                        // Permitir seleccionar y copiar texto
                                         SelectionContainer {
                                             Text(
                                                 text = parrafo.contenido,
@@ -161,10 +159,7 @@ fun BibliotecaEbenezerApp(viewModel: LibraryViewModel = viewModel()) {
                                                     esCita -> 16.sp
                                                     else -> 16.sp
                                                 },
-                                                fontWeight = when {
-                                                    esTituloInterno -> FontWeight.Bold
-                                                    else -> FontWeight.Normal
-                                                },
+                                                fontWeight = if (esTituloInterno) FontWeight.Bold else FontWeight.Normal,
                                                 fontStyle = if (esCita) FontStyle.Italic else FontStyle.Normal,
                                                 lineHeight = 26.sp,
                                                 color = when {
